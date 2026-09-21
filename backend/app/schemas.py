@@ -33,6 +33,16 @@ class JobCreate(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class JobPrecheckOut(BaseModel):
+    """Server-side precheck snapshot rendered by the confirm dialog."""
+
+    sample_id: int | None
+    sample_name: str  # 样例名，或自定义输入标记
+    text_empty: bool  # 文本是否为空（粗检）
+    text_length: int
+    requested_by: str  # 当前用户
+
+
 class StageOut(BaseModel):
     id: int
     actor_name: str

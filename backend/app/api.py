@@ -10,6 +10,7 @@ from app.schemas import (
     JobCreate,
     JobListItem,
     JobOut,
+    JobPrecheckOut,
     LoginRequest,
     SampleOut,
     StageOut,
@@ -53,6 +54,41 @@ def list_samples(_user: dict = Depends(get_current_user), db: Session = Depends(
     return db.query(Sample).order_by(Sample.id).all()
 
 
+def _resolve_submission(body: JobCreate, db: Session) -> tuple[Sample | None, str, str]:
+    """Resolve submission input to (sample, fastq_text, sample_name).
+
+    Shared by precheck and create so the snapshot matches what confirm enqueues.
+    """
+    sample = None
+    fastq_text = (body.fastqText or "").strip() if body.fastqText else ""
+    sample_name = "自定义输入"
+
+    if body.sampleId is not None:
+        sample = db.query(Sample).filter(Sample.id == body.sampleId).first()
+        if not sample:
+            raise HTTPException(status_code=404, detail="样例不存在")
+        fastq_text = sample.fastq_content
+        sample_name = sample.name
+    return sample, fastq_text, sample_name
+
+
+@router.post("/jobs/precheck", response_model=JobPrecheckOut)
+def precheck_job(
+    body: JobCreate,
+    user: dict = Depends(require_bioops),
+    db: Session = Depends(get_db),
+):
+    """Server-side precheck snapshot for the confirm dialog. Creates nothing."""
+    sample, fastq_text, sample_name = _resolve_submission(body, db)
+    return JobPrecheckOut(
+        sample_id=sample.id if sample else None,
+        sample_name=sample_name,
+        text_empty=not fastq_text.strip(),
+        text_length=len(fastq_text),
+        requested_by=user["username"],
+    )
+
+
 @router.post("/jobs", response_model=JobOut, status_code=status.HTTP_201_CREATED)
 def create_job(
     body: JobCreate,
@@ -60,18 +96,8 @@ def create_job(
     user: dict = Depends(require_bioops),
     db: Session = Depends(get_db),
 ):
-    sample_id = body.sampleId
-    fastq_text = (body.fastqText or "").strip() if body.fastqText else ""
-    sample_name = "自定义输入"
-    sample = None
-
-    if sample_id is not None:
-        sample = db.query(Sample).filter(Sample.id == sample_id).first()
-        if not sample:
-            raise HTTPException(status_code=404, detail="样例不存在")
-        fastq_text = sample.fastq_content
-        sample_name = sample.name
-    elif not fastq_text:
+    sample, fastq_text, sample_name = _resolve_submission(body, db)
+    if sample is None and not fastq_text:
         raise HTTPException(status_code=400, detail="请提供 sampleId 或 fastqText")
 
     job = Job(

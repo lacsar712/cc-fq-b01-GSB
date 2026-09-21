@@ -57,6 +57,11 @@ export async function getJobStages(id) {
   return data
 }
 
+export async function precheckJob(body) {
+  const { data } = await api.post('/jobs/precheck', body)
+  return data
+}
+
 export async function createJob(body) {
   const { data } = await api.post('/jobs', body)
   return data
