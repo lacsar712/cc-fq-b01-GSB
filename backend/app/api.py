@@ -11,6 +11,7 @@ from app.schemas import (
     JobListItem,
     JobOut,
     LoginRequest,
+    PreflightOut,
     SampleOut,
     StageOut,
     TokenResponse,
@@ -18,6 +19,30 @@ from app.schemas import (
 
 
 router = APIRouter(prefix="/api")
+
+CUSTOM_SAMPLE_NAME = "自定义输入"
+
+
+def _resolve_job_input(body: JobCreate, db: Session) -> tuple[Sample | None, str, str]:
+    """把提交入参解析为 (样例, 文本, 样例名或自定义标记)。
+
+    sampleId 优先；否则使用 fastqText。样例不存在 / 两者皆空时抛 404 / 400。
+    预检与正式提交共用，保证对话框快照即入队内容。
+    """
+    sample = None
+    fastq_text = (body.fastqText or "").strip() if body.fastqText else ""
+    sample_name = CUSTOM_SAMPLE_NAME
+
+    if body.sampleId is not None:
+        sample = db.query(Sample).filter(Sample.id == body.sampleId).first()
+        if not sample:
+            raise HTTPException(status_code=404, detail="样例不存在")
+        fastq_text = sample.fastq_content
+        sample_name = sample.name
+    elif not fastq_text:
+        raise HTTPException(status_code=400, detail="请提供 sampleId 或 fastqText")
+
+    return sample, fastq_text, sample_name
 
 
 def _run_job_background(job_id: int) -> None:
@@ -53,6 +78,28 @@ def list_samples(_user: dict = Depends(get_current_user), db: Session = Depends(
     return db.query(Sample).order_by(Sample.id).all()
 
 
+@router.post("/jobs/preflight", response_model=PreflightOut)
+def preflight_job(
+    body: JobCreate,
+    user: dict = Depends(require_bioops),
+    db: Session = Depends(get_db),
+):
+    """提交前预检：返回服务端快照供确认对话框渲染。
+
+    只读取/校验，不创建作业、不入队；取消即到此为止。
+    """
+    sample, fastq_text, sample_name = _resolve_job_input(body, db)
+    return PreflightOut(
+        source="sample" if sample else "custom",
+        sample_name=sample_name,
+        is_custom=sample is None,
+        text_empty=not bool(fastq_text.strip()),
+        text_length=len(fastq_text),
+        username=user["username"],
+        role=user["role"],
+    )
+
+
 @router.post("/jobs", response_model=JobOut, status_code=status.HTTP_201_CREATED)
 def create_job(
     body: JobCreate,
@@ -60,19 +107,7 @@ def create_job(
     user: dict = Depends(require_bioops),
     db: Session = Depends(get_db),
 ):
-    sample_id = body.sampleId
-    fastq_text = (body.fastqText or "").strip() if body.fastqText else ""
-    sample_name = "自定义输入"
-    sample = None
-
-    if sample_id is not None:
-        sample = db.query(Sample).filter(Sample.id == sample_id).first()
-        if not sample:
-            raise HTTPException(status_code=404, detail="样例不存在")
-        fastq_text = sample.fastq_content
-        sample_name = sample.name
-    elif not fastq_text:
-        raise HTTPException(status_code=400, detail="请提供 sampleId 或 fastqText")
+    sample, fastq_text, sample_name = _resolve_job_input(body, db)
 
     job = Job(
         sample_id=sample.id if sample else None,

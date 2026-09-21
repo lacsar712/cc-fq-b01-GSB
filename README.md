@@ -54,7 +54,8 @@ docker compose up --build
 - `POST /api/auth/login`
 - `GET  /api/health`
 - `GET  /api/samples`
-- `POST /api/jobs` `{ "sampleId": 1 }` 或 `{ "fastqText": "..." }`
+- `POST /api/jobs/preflight` `{ "sampleId": 1 }` 或 `{ "fastqText": "..." }` — 提交前预检快照（不落库、不入队）
+- `POST /api/jobs` `{ "sampleId": 1 }` 或 `{ "fastqText": "..." }` — 确认后才入队
 - `GET  /api/jobs`
 - `GET  /api/jobs/{id}`
 - `GET  /api/jobs/{id}/stages`

@@ -12,3 +12,12 @@ body {
 .metric-card .q-card__section {
   min-height: 88px;
 }
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.preflight-card {
+  min-width: 380px;
+  max-width: 520px;
+}

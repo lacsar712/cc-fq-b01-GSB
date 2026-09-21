@@ -33,6 +33,18 @@ class JobCreate(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class PreflightOut(BaseModel):
+    """提交前的服务端预检快照：仅用于确认对话框渲染，不落库、不入队。"""
+
+    source: str  # sample | custom
+    sample_name: str  # 样例名或自定义输入标记
+    is_custom: bool
+    text_empty: bool  # 文本是否为空（粗检）
+    text_length: int
+    username: str  # 当前用户
+    role: str
+
+
 class StageOut(BaseModel):
     id: int
     actor_name: str
